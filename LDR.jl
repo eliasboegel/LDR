@@ -32,7 +32,7 @@ using Parameters
     Cm::Float64 = 9.1078e-5 # [-]
     freq::Float64 = 55.79 # [Hz]
     min_perigee::Float64 = 340e3 # [m]
-    t_max::Float64 = 2 * 365 * 24 * 60 # [s], stop after 2 years
+    t_max::Float64 = 2 * 365 * 24 * 3600 # [s], stop after 2 years
     bisect_tol::Float64 = 1 # [s]
 end
 
