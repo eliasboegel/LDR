@@ -3,15 +3,12 @@ using Base: print_array
 # using Pkg
 # Pkg.add("CSV")
 # Pkg.add("DataFrames")
-# Pkg.add("Plots")
-# Pkg.add("PyPlot")
 # Pkg.add("Parameters")
 
 using CSV
 using DataFrames
 using Statistics
 using LinearAlgebra
-using Plots
 using Parameters
 
 
