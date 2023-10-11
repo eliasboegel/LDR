@@ -1,10 +1,4 @@
 module LDR
-export Params, run_configurations
-
-# using Pkg
-# Pkg.add("CSV")
-# Pkg.add("DataFrames")
-# Pkg.add("Parameters")
 using CSV
 using DataFrames
 using Statistics
