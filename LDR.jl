@@ -1,4 +1,5 @@
 module LDR
+export Params, run_configurations
 using CSV
 using DataFrames
 using Statistics
