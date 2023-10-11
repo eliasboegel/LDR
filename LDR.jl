@@ -1,16 +1,15 @@
-using Plots: display
-using Base: print_array
+module LDR
+export Params, run_configurations
+
 # using Pkg
 # Pkg.add("CSV")
 # Pkg.add("DataFrames")
 # Pkg.add("Parameters")
-
 using CSV
 using DataFrames
 using Statistics
 using LinearAlgebra
 using Parameters
-
 
 @with_kw struct Params
     R_e::Float64 = 6378.137e3  # [m]
@@ -372,71 +371,43 @@ function run_sim(params::Params, run_idx::Int64)
     return (ts, percentages, increased_a_percentage)
 end
 
-
-
-
-
-
-configurations::Vector{Params} = [
-    Params(range=300e3, ablation_time=70)
-    Params(range=300e3, ablation_time=60)
-    Params(range=300e3, ablation_time=50)
-    Params(range=300e3, ablation_time=40)
-    Params(range=300e3, ablation_time=30)
-    Params(range=250e3, ablation_time=70)
-    Params(range=250e3, ablation_time=60)
-    Params(range=250e3, ablation_time=50)
-    Params(range=250e3, ablation_time=40)
-    Params(range=250e3, ablation_time=30)
-    Params(range=200e3, ablation_time=70)
-    Params(range=200e3, ablation_time=60)
-    Params(range=200e3, ablation_time=50)
-    Params(range=200e3, ablation_time=40)
-    Params(range=150e3, ablation_time=70)
-    Params(range=150e3, ablation_time=60)
-    Params(range=150e3, ablation_time=50)
-    Params(range=150e3, ablation_time=40)
-    Params(range=100e3, ablation_time=70)
-    Params(range=100e3, ablation_time=60)
-    Params(range=100e3, ablation_time=50)
-    Params(range=100e3, ablation_time=40)
-]
-
-
 # Run through all configurations
-for idx = eachindex(configurations)
-    # Skip configurations which already exist in the data file
-    if isfile("runs.csv")
-        runs = CSV.read("runs.csv", DataFrame, header=1)
-        res = filter(row -> isapprox(row."Collision altitude [m]", configurations[idx].h_collision) &&
-                                isapprox(row."#Fragments [-]", configurations[idx].d_n) &&
-                                isapprox(row."T_0 [days]", configurations[idx].t0 / (24 * 3600)) &&
-                                isapprox(row."SC Altitude Offset [m]", configurations[idx].h_offset) &&
-                                isapprox(row."Target Fraction [-]", configurations[idx].target_fraction) &&
-                                isapprox(row."FoV [deg]", configurations[idx].FoV * 180 / pi) &&
-                                isapprox(row."Range [m]", configurations[idx].range) &&
-                                isapprox(row."Incidence Angle [deg]", configurations[idx].incidence_angle * 180 / pi) &&
-                                isapprox(row."Ablation Time [s]", configurations[idx].ablation_time) &&
-                                isapprox(row."Scan Time [s]", configurations[idx].scan_time) &&
-                                isapprox(row."Cooldown Time [s]", configurations[idx].cooldown_time) &&
-                                isapprox(row."Fluence [J/m^2]", configurations[idx].fluence) &&
-                                isapprox(row."Removal Altitude [m]", configurations[idx].min_perigee), runs)
+function run_configurations(configurations, output_file)
+    for idx = eachindex(configurations)
+        # Skip configurations which already exist in the data file
+        if isfile(output_file)
+            runs = CSV.read(output_file, DataFrame, header=1)
+            res = filter(row -> isapprox(row."Collision altitude [m]", configurations[idx].h_collision) &&
+                                    isapprox(row."#Fragments [-]", configurations[idx].d_n) &&
+                                    isapprox(row."T_0 [days]", configurations[idx].t0 / (24 * 3600)) &&
+                                    isapprox(row."SC Altitude Offset [m]", configurations[idx].h_offset) &&
+                                    isapprox(row."Target Fraction [-]", configurations[idx].target_fraction) &&
+                                    isapprox(row."FoV [deg]", configurations[idx].FoV * 180 / pi) &&
+                                    isapprox(row."Range [m]", configurations[idx].range) &&
+                                    isapprox(row."Incidence Angle [deg]", configurations[idx].incidence_angle * 180 / pi) &&
+                                    isapprox(row."Ablation Time [s]", configurations[idx].ablation_time) &&
+                                    isapprox(row."Scan Time [s]", configurations[idx].scan_time) &&
+                                    isapprox(row."Cooldown Time [s]", configurations[idx].cooldown_time) &&
+                                    isapprox(row."Fluence [J/m^2]", configurations[idx].fluence) &&
+                                    isapprox(row."Removal Altitude [m]", configurations[idx].min_perigee), runs)
 
-        if nrow(res) > 0
-            println("Existing data using configuration ", idx, " detected. Skipping...")
-            continue
+            if nrow(res) > 0
+                println("Existing data using configuration ", idx, " detected. Skipping...")
+                continue
+            end
         end
+
+
+        @time (times, perc, perc_increased_a) = run_sim(configurations[idx], idx)
+        time_required = last(times)
+        fraction_removed = last(perc)
+        println("Run ", idx, " finished! Time: ", round(time_required / (24 * 3600), digits=3), "days")
+
+        CSV.write(output_file,
+            DataFrame(transpose([configurations[idx].h_collision, float(configurations[idx].d_n), configurations[idx].t0 / (3600 * 24), configurations[idx].h_offset, configurations[idx].target_fraction, configurations[idx].FoV * 180 / pi, configurations[idx].range, configurations[idx].incidence_angle * 180 / pi, configurations[idx].ablation_time, configurations[idx].scan_time, configurations[idx].cooldown_time, configurations[idx].fluence, configurations[idx].min_perigee, time_required / (3600 * 24), fraction_removed]), :auto),
+            header=["Collision altitude [m]", "#Fragments [-]", "T_0 [days]", "SC Altitude Offset [m]", "Target Fraction [-]", "FoV [deg]", "Range [m]", "Incidence Angle [deg]", "Ablation Time [s]", "Scan Time [s]", "Cooldown Time [s]", "Fluence [J/m^2]", "Removal Altitude [m]", "Time Required [days]", "Fraction removed [-]"],
+            append=(filesize(output_file) != 0)
+        )
     end
-
-
-    @time (times, perc, perc_increased_a) = run_sim(configurations[idx], idx)
-    time_required = last(times)
-    fraction_removed = last(perc)
-    println("Run ", idx, " finished! Time: ", round(time_required / (24 * 3600), digits=3), "days")
-
-    CSV.write("runs.csv",
-        DataFrame(transpose([configurations[idx].h_collision, float(configurations[idx].d_n), configurations[idx].t0 / (3600 * 24), configurations[idx].h_offset, configurations[idx].target_fraction, configurations[idx].FoV * 180 / pi, configurations[idx].range, configurations[idx].incidence_angle * 180 / pi, configurations[idx].ablation_time, configurations[idx].scan_time, configurations[idx].cooldown_time, configurations[idx].fluence, configurations[idx].min_perigee, time_required / (3600 * 24), fraction_removed]), :auto),
-        header=["Collision altitude [m]", "#Fragments [-]", "T_0 [days]", "SC Altitude Offset [m]", "Target Fraction [-]", "FoV [deg]", "Range [m]", "Incidence Angle [deg]", "Ablation Time [s]", "Scan Time [s]", "Cooldown Time [s]", "Fluence [J/m^2]", "Removal Altitude [m]", "Time Required [days]", "Fraction removed [-]"],
-        append=(filesize("runs.csv") != 0)
-    )
+end
 end
