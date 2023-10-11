@@ -20,23 +20,28 @@ import scipy.interpolate as interp
 # 12: Removal Altitude [m]
 # 13: Time Required [days]
 # 14: Fraction removed [-]
-# data = np.genfromtxt("runs.csv", delimiter=",", names=True, comments=None)
-# # data = np.genfromtxt("runs.csv", delimiter=",", skip_header=1)
-# # header = np.genfromtxt("runs.csv", dtype=str, delimiter=",", max_rows=1)
-# print(data)
-# data[data[:,14]<0.5] = np.nan # Any run that ran into t_max should have its fraction treated as NaN
 
 df = pd.read_csv("runs.csv")
-# df.loc[df['Fraction removed [-]'] < 0.5,'Time Required [days]'] = np.nan
-
 fig, ax = plt.subplots(1, 2, figsize=[10,5])
 
+# Select dataset to plot, set x_axis and y_axis and set values for all other parameters that are constant in the plot (only X and Y axis are plotted obviously)
 x_axis = "Ablation Time [s]"
 y_axis = "Range [m]"
-
-# grid_x, grid_y = np.meshgrid(np.linspace(df[x_axis].min(), df[x_axis].max(), 1000), np.linspace(df[y_axis].min(), df[y_axis].max(), 1000))
-# grid_z = interp.griddata(np.vstack([df[x_axis], df[y_axis]]).T, df["Time Required [days]"], (grid_x, grid_y), method='nearest')
-# plt.imshow(grid_z, origin='lower', cmap="viridis_r", extent=[df[x_axis].min(), df[x_axis].max(), df[y_axis].min(), df[y_axis].max()], aspect="auto")
+df = df[
+    np.isclose(df["Collision altitude [m]"], 789000) &
+    np.isclose(df["#Fragments [-]"], 100000) &
+    np.isclose(df["T_0 [days]"], 1) &
+    np.isclose(df["SC Altitude Offset [m]"], 30e3) &
+    np.isclose(df["FoV [deg]"], 38.44) &
+    np.isclose(df["Target Fraction [-]"], 0.5) &
+    # np.isclose(df["Range [m]"], 300000) &
+    np.isclose(df["Incidence Angle [deg]"], 20) &
+    # np.isclose(df["Ablation Time [s]"], 70) &
+    np.isclose(df["Scan Time [s]"], 5) &
+    np.isclose(df["Cooldown Time [s]"], 70) &
+    np.isclose(df["Fluence [J/m^2]"], 8500) &
+    np.isclose(df["Removal Altitude [m]"], 340000)
+]
 
 scatter = ax[0].scatter(df[x_axis], df[y_axis], s=10, c=df["Time Required [days]"], cmap="viridis_r")
 contour = ax[1].tricontourf(df[x_axis], df[y_axis], df["Time Required [days]"], cmap="viridis_r")
