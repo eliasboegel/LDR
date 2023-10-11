@@ -2,7 +2,6 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import numpy as np
 import pandas as pd
-import scipy.interpolate as interp
 
 # Indices
 # 0:  Collision altitude [m]
@@ -43,7 +42,7 @@ df = df[
     np.isclose(df["Removal Altitude [m]"], 340000)
 ]
 
-scatter = ax[0].scatter(df[x_axis], df[y_axis], s=10, c=df["Time Required [days]"], cmap="viridis_r")
+scatter = ax[0].scatter(df[x_axis], df[y_axis], s=10, c=df["Time Required [days]"], cmap="viridis_r", )
 contour = ax[1].tricontourf(df[x_axis], df[y_axis], df["Time Required [days]"], cmap="viridis_r")
 ax[0].set_aspect("auto")
 ax[1].set_aspect("auto")
