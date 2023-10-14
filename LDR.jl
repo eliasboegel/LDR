@@ -215,7 +215,7 @@ function update(params::Params, kepler, t_ref::Float64, t::Float64)
     @inbounds kepler[7] = compute_true_anomaly(kepler[2], kepler[6]) # f update
 end
 
-function run_sim(params::Params, run_idx::Int64)
+function run_sim(params::Params, run_idx)
 
     # Import data
     df = CSV.read("iridium_cosmos_result.csv", DataFrame; header=1)
