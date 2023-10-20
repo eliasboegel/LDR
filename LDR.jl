@@ -1,6 +1,5 @@
 module LDR
 export Params, run_configurations
-using CSV
 using DataFrames
 using Statistics
 using LinearAlgebra
@@ -15,7 +14,7 @@ using DelimitedFiles
     d_n::Int64 = 100000  # number of fragments, change this number for simulation speed
     t0::Float64 = 5 * 24 * 3600  # 5 days
     h_offset::Float64 = 30e3  # [m]
-    target_fraction::Float64 = 0.01#1 / 2
+    target_fraction::Float64 = 1 / 2
     max_dv::Float64 = 0.1 # Maximum dV used in gaussian perturbation equations
     FoV::Float64 = 38.44 * pi / 180  # [rad]
     range::Float64 = 300e3 # [m]
