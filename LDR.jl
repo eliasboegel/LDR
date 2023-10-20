@@ -5,6 +5,7 @@ using DataFrames
 using Statistics
 using LinearAlgebra
 using Parameters
+using DelimitedFiles
 
 @with_kw struct Params
     R_e::Float64 = 6378.137e3  # [m]
@@ -14,7 +15,7 @@ using Parameters
     d_n::Int64 = 100000  # number of fragments, change this number for simulation speed
     t0::Float64 = 5 * 24 * 3600  # 5 days
     h_offset::Float64 = 30e3  # [m]
-    target_fraction::Float64 = 1 / 2
+    target_fraction::Float64 = 0.01#1 / 2
     max_dv::Float64 = 0.1 # Maximum dV used in gaussian perturbation equations
     FoV::Float64 = 38.44 * pi / 180  # [rad]
     range::Float64 = 300e3 # [m]
@@ -219,7 +220,8 @@ end
 function run_sim(params::Params, run_idx)
 
     # Import data
-    df = CSV.read("iridium_cosmos_result.csv", DataFrame; header=1)
+    mat, head = readdlm("iridium_cosmos_result.csv", ',', header=true)
+    df = DataFrame(mat, vec(head))
 
     # Select data that is necessary and convert to matrix
     df = filter(row -> row.Name .== "Kosmos 2251-Collision-Fragment", df)
@@ -377,7 +379,8 @@ function run_configurations(configurations, output_file)
     for idx = eachindex(configurations)
         # Skip configurations which already exist in the data file
         if isfile(output_file)
-            runs = CSV.read(output_file, DataFrame, header=1)
+            mat, head = readdlm(output_file, ',', header=true)
+            runs = DataFrame(mat, vec(head))
             res = filter(row -> isapprox(row."Collision altitude [m]", configurations[idx].h_collision) &&
                                     isapprox(row."#Fragments [-]", configurations[idx].d_n) &&
                                     isapprox(row."T_0 [days]", configurations[idx].t0 / (24 * 3600)) &&
@@ -404,11 +407,15 @@ function run_configurations(configurations, output_file)
         fraction_removed = last(perc)
         println("Run ", idx, " finished! Time: ", round(time_required / (24 * 3600), digits=3), "days")
 
-        CSV.write(output_file,
-            DataFrame(transpose([configurations[idx].h_collision, float(configurations[idx].d_n), configurations[idx].t0 / (3600 * 24), configurations[idx].h_offset, configurations[idx].target_fraction, configurations[idx].FoV * 180 / pi, configurations[idx].range, configurations[idx].incidence_angle * 180 / pi, configurations[idx].ablation_time, configurations[idx].scan_time, configurations[idx].cooldown_time, configurations[idx].fluence, configurations[idx].min_perigee, time_required / (3600 * 24), fraction_removed]), :auto),
-            header=["Collision altitude [m]", "#Fragments [-]", "T_0 [days]", "SC Altitude Offset [m]", "Target Fraction [-]", "FoV [deg]", "Range [m]", "Incidence Angle [deg]", "Ablation Time [s]", "Scan Time [s]", "Cooldown Time [s]", "Fluence [J/m^2]", "Removal Altitude [m]", "Time Required [days]", "Fraction removed [-]"],
-            append=(filesize(output_file) != 0)
-        )
+
+        if filesize(output_file) == 0
+            open(output_file, "w") do io
+                writedlm(io, reshape(["Collision altitude [m]", "#Fragments [-]", "T_0 [days]", "SC Altitude Offset [m]", "Target Fraction [-]", "FoV [deg]", "Range [m]", "Incidence Angle [deg]", "Ablation Time [s]", "Scan Time [s]", "Cooldown Time [s]", "Fluence [J/m^2]", "Removal Altitude [m]", "Time Required [days]", "Fraction removed [-]"], 1, :), ",")
+            end
+        end
+        open(output_file, "a") do io
+            writedlm(io, reshape([configurations[idx].h_collision, float(configurations[idx].d_n), configurations[idx].t0 / (3600 * 24), configurations[idx].h_offset, configurations[idx].target_fraction, configurations[idx].FoV * 180 / pi, configurations[idx].range, configurations[idx].incidence_angle * 180 / pi, configurations[idx].ablation_time, configurations[idx].scan_time, configurations[idx].cooldown_time, configurations[idx].fluence, configurations[idx].min_perigee, time_required / (3600 * 24), fraction_removed], 1, :), ",")
+        end
     end
 end
 end
