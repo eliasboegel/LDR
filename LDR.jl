@@ -307,7 +307,7 @@ function run_sim(params::Params, run_idx)
             # if in_conditions(params, view(d_cartesian, i, :), view(d_cartesian_vel, i, :), sc_pos, sc_vel)
             @inbounds if conditions[i]
                 @inbounds t_begin = bisect(params, view(d_kepler, i, :), view(sc_kepler, 1, :), t, t - (params.scan_time + params.ablation_time), t, in_conditions)
-                @inbounds t_end = bisect(params, view(d_kepler, i, :), view(sc_kepler, 1, :), t, t, t + (params.scan_time + params.ablation_time), in_conditions_nofov)
+                @inbounds t_end = bisect(params, view(d_kepler, i, :), view(sc_kepler, 1, :), t, t, t + (params.scan_time + params.ablation_time), in_conditions)
                 @inbounds d_vis_times_pass[i] = t_end - t_begin
 
                 # If fragment is visible long enough, use ablation laser
