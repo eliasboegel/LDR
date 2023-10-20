@@ -15,7 +15,7 @@ using Parameters
     t0::Float64 = 5 * 24 * 3600  # 5 days
     h_offset::Float64 = 30e3  # [m]
     target_fraction::Float64 = 1 / 2
-    max_dv::Float64 = 1 # Maximum dV used in gaussian perturbation equations
+    max_dv::Float64 = 0.1 # Maximum dV used in gaussian perturbation equations
     FoV::Float64 = 38.44 * pi / 180  # [rad]
     range::Float64 = 300e3 # [m]
     incidence_angle::Float64 = 20 * pi / 180 # [rad]
@@ -53,11 +53,16 @@ function compute_true_anomaly(e::Float64, M::Float64)
     return 2 * atan(sqrt((1 + e) / (1 - e)) * tan(E / 2))
 end
 
-function thrust_alter_orbit(params::Params, d_kepler, d_cartesian, d_cartesian_vel, d_dims, thrust_dir::Vector{Float64}, tot_dv::Float64)
+function thrust_alter_orbit(params::Params, d_kepler::SubArray{Float64,1,Matrix{Float64},Tuple{Int64,Base.Slice{Base.OneTo{Int64}}},true}, d_cartesian::SubArray{Float64,1,Matrix{Float64},Tuple{Int64,Base.Slice{Base.OneTo{Int64}}},true}, d_cartesian_vel::SubArray{Float64,1,Matrix{Float64},Tuple{Int64,Base.Slice{Base.OneTo{Int64}}},true}, d_dims, thrust_dir::Vector{Float64}, tot_dv::Float64)
     # Establish RTO (Radial, Transverse, Out-of-plane) axes (unit vectors)
     @inbounds R = normalize(d_cartesian)
     @inbounds O = normalize(cross(R, d_cartesian_vel))
     T = cross(O, R)
+    thrust_dir_rto = Vector{Float64}(undef, 3)
+    @inbounds thrust_dir_rto[1] = dot(thrust_dir, R)
+    @inbounds thrust_dir_rto[2] = dot(thrust_dir, T)
+    @inbounds thrust_dir_rto[3] = dot(thrust_dir, O)
+
 
     # Compute product of a and thrust_dt
     # Based on kinetic energy and v2 = a * dt + v1
@@ -68,18 +73,14 @@ function thrust_alter_orbit(params::Params, d_kepler, d_cartesian, d_cartesian_v
     remaining_dv::Float64 = tot_dv
     while remaining_dv > 0
         dv::Float64 = (remaining_dv / params.max_dv) < 1 ? mod(remaining_dv, params.max_dv) : params.max_dv
-        dir_dv::Vector{Float64} = thrust_dir .* dv
-        dir_dv_rto::Vector{Float64} = zeros(3)
-        @inbounds dir_dv_rto[1] = dot(dir_dv, R)
-        @inbounds dir_dv_rto[2] = dot(dir_dv, T)
-        @inbounds dir_dv_rto[3] = dot(dir_dv, O)
+        dir_dv_rto::Vector{Float64} = thrust_dir_rto .* dv
 
         @inbounds sqramu::Float64 = sqrt(d_kepler[1] / params.mu)
-        @inbounds sub1e2 = 1 - d_kepler[2] * d_kepler[2]
-        sqr1e2 = sqrt(sub1e2)
-        @inbounds sinf = sin(d_kepler[7])
-        @inbounds cosf = cos(d_kepler[7])
-        @inbounds ecosf1 = d_kepler[2] * cosf + 1
+        # print(d_kepler[2], ", ", d_kepler[2] * d_kepler[2], ", ", 1 - d_kepler[2] * d_kepler[2], "\n")
+        sqr1e2::Float64 = sqrt(1 - d_kepler[2] * d_kepler[2])
+        @inbounds sinf::Float64 = sin(d_kepler[7])
+        @inbounds cosf::Float64 = cos(d_kepler[7])
+        @inbounds ecosf1::Float64 = d_kepler[2] * cosf + 1
         @inbounds n::Float64 = sqrt(params.mu / d_kepler[1]^3)
 
         # Gaussian perturbation formulae
@@ -89,7 +90,7 @@ function thrust_alter_orbit(params::Params, d_kepler, d_cartesian, d_cartesian_v
         dRAAN::Float64 = sqramu * sqr1e2 / ecosf1 * sin(d_kepler[5] + d_kepler[7]) / sin(d_kepler[3]) * dir_dv_rto[3]
         @inbounds d_kepler[4] += dRAAN
         @inbounds d_kepler[5] += sqramu * sqr1e2 / d_kepler[2] * (-cosf * dir_dv_rto[1] + (ecosf1 + 1) / ecosf1 * sinf * dir_dv_rto[2]) - cos(d_kepler[3]) * dRAAN
-        @inbounds d_kepler[6] += n + sub1e2 / (n * d_kepler[1] * d_kepler[2]) * ((cosf - 2 * d_kepler[2] / ecosf1) * dir_dv_rto[1] - (ecosf1 + 1) / ecosf1 * sinf * dir_dv_rto[2])
+        @inbounds d_kepler[6] += n + (1 - d_kepler[2] * d_kepler[2]) / (n * d_kepler[1] * d_kepler[2]) * ((cosf - 2 * d_kepler[2] / ecosf1) * dir_dv_rto[1] - (ecosf1 + 1) / ecosf1 * sinf * dir_dv_rto[2])
 
         remaining_dv -= params.max_dv
     end
@@ -97,13 +98,13 @@ function thrust_alter_orbit(params::Params, d_kepler, d_cartesian, d_cartesian_v
     # println("ΔV imparted: ", (sqrt(v1 * v1 + 2 * thrust_energy / d_dims[i,1]) - v1))
 end
 
-function in_range(params::Params, d_pos, sc_pos::Vector{Float64}) # Returns true if debris object is within range of spacecraft
+function in_range(params::Params, d_pos::SubArray{Float64,1,Matrix{Float64},Tuple{Int64,Base.Slice{Base.OneTo{Int64}}},true}, sc_pos::SubArray{Float64,1,Matrix{Float64},Tuple{Int64,Base.Slice{Base.OneTo{Int64}}},true}) # Returns true if debris object is within range of spacecraft
     pos_rel::Vector{Float64} = sc_pos .- d_pos
     abs_distance::Float64 = norm(pos_rel)
     return abs_distance < params.range
 end
 
-function in_incidence(params::Params, d_pos, d_vel, sc_pos::Vector{Float64}) # Returns true if debris object meets the incidence angle requirement
+function in_incidence(params::Params, d_pos::SubArray{Float64,1,Matrix{Float64},Tuple{Int64,Base.Slice{Base.OneTo{Int64}}},true}, d_vel::SubArray{Float64,1,Matrix{Float64},Tuple{Int64,Base.Slice{Base.OneTo{Int64}}},true}, sc_pos::SubArray{Float64,1,Matrix{Float64},Tuple{Int64,Base.Slice{Base.OneTo{Int64}}},true}) # Returns true if debris object meets the incidence angle requirement
     pos_rel::Vector{Float64} = sc_pos .- d_pos
 
     # Check angle between debris tranjectory and spacecraft relative to debris
@@ -111,7 +112,7 @@ function in_incidence(params::Params, d_pos, d_vel, sc_pos::Vector{Float64}) # R
     return vel_rel_pos_angle < params.incidence_angle
 end
 
-function in_fov(params::Params, d_pos, sc_pos::Vector{Float64}, sc_vel::Vector{Float64}) # Returns true if debris object meets the fov cone requirement
+function in_fov(params::Params, d_pos::SubArray{Float64,1,Matrix{Float64},Tuple{Int64,Base.Slice{Base.OneTo{Int64}}},true}, sc_pos::SubArray{Float64,1,Matrix{Float64},Tuple{Int64,Base.Slice{Base.OneTo{Int64}}},true}, sc_vel::SubArray{Float64,1,Matrix{Float64},Tuple{Int64,Base.Slice{Base.OneTo{Int64}}},true}) # Returns true if debris object meets the fov cone requirement
     pos_rel::Vector{Float64} = sc_pos .- d_pos
 
     laser_pointing_angle::Float64 = acos((params.R_e + params.h_collision) / (params.R_e + params.h_collision + params.h_offset))
@@ -120,52 +121,52 @@ function in_fov(params::Params, d_pos, sc_pos::Vector{Float64}, sc_vel::Vector{F
     return acos(dot(pointing_vector, -pos_rel) / (norm(pointing_vector) * norm(-pos_rel))) < params.FoV / 2
 end
 
-function in_conditions(params::Params, d_pos, d_vel, sc_pos::Vector{Float64}, sc_vel::Vector{Float64})
+function in_conditions(params::Params, d_pos::SubArray{Float64,1,Matrix{Float64},Tuple{Int64,Base.Slice{Base.OneTo{Int64}}},true}, d_vel::SubArray{Float64,1,Matrix{Float64},Tuple{Int64,Base.Slice{Base.OneTo{Int64}}},true}, sc_pos::SubArray{Float64,1,Matrix{Float64},Tuple{Int64,Base.Slice{Base.OneTo{Int64}}},true}, sc_vel::SubArray{Float64,1,Matrix{Float64},Tuple{Int64,Base.Slice{Base.OneTo{Int64}}},true})
     return in_range(params, d_pos, sc_pos) &&
            in_incidence(params, d_pos, d_vel, sc_pos) &&
            in_fov(params, d_pos, sc_pos, sc_vel)
 end
 
-function in_conditions_nofov(params::Params, d_pos, d_vel, sc_pos::Vector{Float64}, sc_vel::Vector{Float64})
+function in_conditions_nofov(params::Params, d_pos::SubArray{Float64,1,Matrix{Float64},Tuple{Int64,Base.Slice{Base.OneTo{Int64}}},true}, d_vel::SubArray{Float64,1,Matrix{Float64},Tuple{Int64,Base.Slice{Base.OneTo{Int64}}},true}, sc_pos::SubArray{Float64,1,Matrix{Float64},Tuple{Int64,Base.Slice{Base.OneTo{Int64}}},true}, sc_vel::SubArray{Float64,1,Matrix{Float64},Tuple{Int64,Base.Slice{Base.OneTo{Int64}}},true})
     return in_range(params, d_pos, sc_pos) &&
            in_incidence(params, d_pos, d_vel, sc_pos)
 end
 
-function bisect(params::Params, d_ref_kepler, sc_ref_kepler::Vector{Float64}, t_ref::Float64, t_left::Float64, t_right::Float64, condition_func)
+function bisect(params::Params, d_ref_kepler::SubArray{Float64,1,Matrix{Float64},Tuple{Int64,Base.Slice{Base.OneTo{Int64}}},true}, sc_ref_kepler::SubArray{Float64,1,Matrix{Float64},Tuple{Int64,Base.Slice{Base.OneTo{Int64}}},true}, t_ref::Float64, t_left::Float64, t_right::Float64, condition_func)
 
     # Compute sc and debris state at left interval bound
-    sc_left_kepler = copy(sc_ref_kepler)
-    update(params, sc_left_kepler, t_ref, t_left)
-    sc_left_pos = Vector{Float64}(undef, 3)
-    sc_left_vel = Vector{Float64}(undef, 3)
-    compute_cartesian(params, sc_left_vel, sc_left_pos, sc_left_kepler)
-    d_left_kepler = copy(d_ref_kepler)
-    update(params, d_left_kepler, t_ref, t_left)
-    d_left_pos = Vector{Float64}(undef, 3)
-    d_left_vel = Vector{Float64}(undef, 3)
-    compute_cartesian(params, d_left_vel, d_left_pos, d_left_kepler)
-    condition_left = condition_func(params, d_left_pos, d_left_vel, sc_left_pos, sc_left_vel)
+    sc_left_kepler::Matrix{Float64} = reshape(copy(sc_ref_kepler), 1, :)
+    update(params, view(sc_left_kepler, 1, :), t_ref, t_left)
+    sc_left_pos = Matrix{Float64}(undef, 1, 3)
+    sc_left_vel = Matrix{Float64}(undef, 1, 3)
+    compute_cartesian(params, view(sc_left_vel, 1, :), view(sc_left_pos, 1, :), view(sc_left_kepler, 1, :))
+    d_left_kepler = reshape(copy(d_ref_kepler), 1, :)
+    update(params, view(d_left_kepler, 1, :), t_ref, t_left)
+    d_left_pos = Matrix{Float64}(undef, 1, 3)
+    d_left_vel = Matrix{Float64}(undef, 1, 3)
+    compute_cartesian(params, view(d_left_vel, 1, :), view(d_left_pos, 1, :), view(d_left_kepler, 1, :))
+    condition_left = condition_func(params, view(d_left_pos, 1, :), view(d_left_vel, 1, :), view(sc_left_pos, 1, :), view(sc_left_vel, 1, :))
 
     # Compute sc and debris state at right interval bound
-    sc_right_kepler = copy(sc_ref_kepler)
-    update(params, sc_right_kepler, t_ref, t_right)
-    sc_right_pos = Vector{Float64}(undef, 3)
-    sc_right_vel = Vector{Float64}(undef, 3)
-    compute_cartesian(params, sc_right_vel, sc_right_pos, sc_right_kepler)
-    d_right_kepler = copy(d_ref_kepler)
-    update(params, d_right_kepler, t_ref, t_right)
-    d_right_pos = Vector{Float64}(undef, 3)
-    d_right_vel = Vector{Float64}(undef, 3)
-    compute_cartesian(params, d_right_vel, d_right_pos, d_right_kepler)
-    condition_right = condition_func(params, d_right_pos, d_right_vel, sc_right_pos, sc_right_vel)
+    sc_right_kepler = reshape(copy(sc_ref_kepler), 1, :)
+    update(params, view(sc_right_kepler, 1, :), t_ref, t_right)
+    sc_right_pos = Matrix{Float64}(undef, 1, 3)
+    sc_right_vel = Matrix{Float64}(undef, 1, 3)
+    compute_cartesian(params, view(sc_right_vel, 1, :), view(sc_right_pos, 1, :), view(sc_right_kepler, 1, :))
+    d_right_kepler = reshape(copy(d_ref_kepler), 1, :)
+    update(params, view(d_right_kepler, 1, :), t_ref, t_right)
+    d_right_pos = Matrix{Float64}(undef, 1, 3)
+    d_right_vel = Matrix{Float64}(undef, 1, 3)
+    compute_cartesian(params, view(d_right_vel, 1, :), view(d_right_pos, 1, :), view(d_right_kepler, 1, :))
+    condition_right = condition_func(params, view(d_right_pos, 1, :), view(d_right_vel, 1, :), view(sc_right_pos, 1, :), view(sc_right_vel, 1, :))
 
     # Allocate data for mid point
-    sc_mid_kepler = copy(sc_ref_kepler)
-    d_mid_kepler = copy(d_ref_kepler)
-    sc_mid_pos = Vector{Float64}(undef, 3)
-    sc_mid_vel = Vector{Float64}(undef, 3)
-    d_mid_pos = Vector{Float64}(undef, 3)
-    d_mid_vel = Vector{Float64}(undef, 3)
+    sc_mid_kepler = reshape(copy(sc_ref_kepler), 1, :)
+    d_mid_kepler = reshape(copy(d_ref_kepler), 1, :)
+    sc_mid_pos = Matrix{Float64}(undef, 1, 3)
+    sc_mid_vel = Matrix{Float64}(undef, 1, 3)
+    d_mid_pos = Matrix{Float64}(undef, 1, 3)
+    d_mid_vel = Matrix{Float64}(undef, 1, 3)
 
     if condition_left == condition_right # Triggers if debris object is visible for the entire bisection interval. This can only happen for the future part of the interval
         return t_right * (t_ref == t_left) + t_left * (t_ref == t_right) # Depending on whether its the left or right bisection interval, return the respective maximum time span
@@ -175,11 +176,11 @@ function bisect(params::Params, d_ref_kepler, sc_ref_kepler::Vector{Float64}, t_
     while (t_right - t_left) > params.bisect_tol # Run until bisection interval is smaller than tolerance
         t_mid = (t_left + t_right) / 2 # Initial bisection mid point
 
-        update(params, sc_mid_kepler, t_ref, t_mid)
-        compute_cartesian(params, sc_mid_vel, sc_mid_pos, sc_mid_kepler)
-        update(params, d_mid_kepler, t_ref, t_mid)
-        compute_cartesian(params, d_mid_vel, d_mid_pos, d_mid_kepler)
-        condition_mid = condition_func(params, d_mid_pos, d_mid_vel, sc_mid_pos, sc_mid_vel)
+        update(params, view(sc_mid_kepler, 1, :), t_ref, t_mid)
+        compute_cartesian(params, view(sc_mid_vel, 1, :), view(sc_mid_pos, 1, :), view(sc_mid_kepler, 1, :))
+        update(params, view(d_mid_kepler, 1, :), t_ref, t_mid)
+        compute_cartesian(params, view(d_mid_vel, 1, :), view(d_mid_pos, 1, :), view(d_mid_kepler, 1, :))
+        condition_mid = condition_func(params, view(d_mid_pos, 1, :), view(d_mid_vel, 1, :), view(sc_mid_pos, 1, :), view(sc_mid_vel, 1, :))
 
         if condition_left == condition_mid
             t_left = t_mid
@@ -192,7 +193,7 @@ function bisect(params::Params, d_ref_kepler, sc_ref_kepler::Vector{Float64}, t_
     return t_mid # Last bisection interval mid point is time where object started meeting condition
 end
 
-function compute_cartesian(params::Params, vel, pos, kepler)
+function compute_cartesian(params::Params, vel::SubArray{Float64,1,Matrix{Float64},Tuple{Int64,Base.Slice{Base.OneTo{Int64}}},true}, pos::SubArray{Float64,1,Matrix{Float64},Tuple{Int64,Base.Slice{Base.OneTo{Int64}}},true}, kepler::SubArray{Float64,1,Matrix{Float64},Tuple{Int64,Base.Slice{Base.OneTo{Int64}}},true})
     @inbounds p = kepler[1] * (1 - kepler[2] * kepler[2])
     @inbounds r = p / (1 + kepler[2] * cos(kepler[7]))
     h = sqrt(params.mu * p)
@@ -205,7 +206,7 @@ function compute_cartesian(params::Params, vel, pos, kepler)
     @inbounds vel[3] = (pos[3] * h * kepler[2] / (r * p)) * sin(kepler[7]) + (h / r) * (cos(kepler[5] + kepler[7]) * sin(kepler[3]))
 end
 
-function update(params::Params, kepler, t_ref::Float64, t::Float64)
+function update(params::Params, kepler::SubArray{Float64,1,Matrix{Float64},Tuple{Int64,Base.Slice{Base.OneTo{Int64}}},true}, t_ref::Float64, t::Float64)
     dt = t - t_ref
     # a, e, i is constant
     @inbounds n = sqrt(params.mu / kepler[1]^3)
@@ -246,9 +247,10 @@ function run_sim(params::Params, run_idx)
     t_last_pulse::Float64 = -Inf64
     ts = Vector{Float64}(undef, 0)
     percentages = Vector{Float64}(undef, 0)
-    sc_pos = zeros(3)
-    sc_vel = zeros(3)
+    sc_pos::Matrix{Float64} = zeros(1, 3)
+    sc_vel::Matrix{Float64} = zeros(1, 3)
     distances = zeros(tot_d_n)
+    conditions = zeros(Bool, tot_d_n)
 
     filter_count::Int32 = 1 # Don't change
     filter_percent::Int32 = 1 # Cull removed objects every x percent removed
@@ -263,32 +265,33 @@ function run_sim(params::Params, run_idx)
     end
 
     # Initialize spacecraft
-    sc_kepler::Vector{Float64} = [
-        params.R_e + params.h_collision + params.h_offset, # a
-        0, # e
-        74 * pi / 180, # i
-        0, # RAAN, will be set to average debris RAAN at t0
-        0, # w
-        0, # M
-        0, # f, will be overwritten
-    ]
-    update(params, sc_kepler, 0.0, params.t0) # Propagate from t=0 to t=t0
-    sc_kepler[4] = mean(d_kepler[:, 4]) # Set RAAN to average spacecraft RAAN at t0
-    sc_kepler[6] = mean(d_kepler[:, 6]) # Set spacecraft mean anomaly to average mean anomaly at t0
-    update(params, sc_kepler, params.t0, params.t0) # Use update function to compute true anomaly after setting the mean anomaly
+    sc_kepler::Matrix{Float64} = transpose([
+        params.R_e + params.h_collision + params.h_offset # a
+        0 # e
+        74 * pi / 180 # i
+        0 # RAAN, will be set to average debris RAAN at t0
+        0 # w
+        0 # M
+        0 # f, will be overwritten
+    ][:, :])
+    update(params, view(sc_kepler, 1, :), 0.0, params.t0) # Propagate from t=0 to t=t0
+    sc_kepler[1, 4] = mean(d_kepler[:, 4]) # Set RAAN to average spacecraft RAAN at t0
+    sc_kepler[1, 6] = mean(d_kepler[:, 6]) # Set spacecraft mean anomaly to average mean anomaly at t0
+    update(params, view(sc_kepler, 1, :), params.t0, params.t0) # Use update function to compute true anomaly after setting the mean anomaly
 
     # Main loop
     while (d_counter / tot_d_n < params.target_fraction) && t < params.t_max
         push!(ts, t - params.t0)
 
         # Propagate spacecraft and compute spacecraft position and velocity
-        update(params, sc_kepler, t, t + (params.scan_time + params.ablation_time))
-        compute_cartesian(params, sc_vel, sc_pos, sc_kepler)
+        update(params, view(sc_kepler, 1, :), t, t + (params.scan_time + params.ablation_time))
+        compute_cartesian(params, view(sc_vel, 1, :), view(sc_pos, 1, :), view(sc_kepler, 1, :))
 
         Threads.@threads for i in axes(d_kepler, 1)
             # Propagate debris
             @inbounds update(params, view(d_kepler, i, :), t, t + (params.scan_time + params.ablation_time))
             @inbounds compute_cartesian(params, view(d_cartesian_vel, i, :), view(d_cartesian, i, :), view(d_kepler, i, :))
+            @inbounds conditions[i] = in_conditions(params, view(d_cartesian, i, :), view(d_cartesian_vel, i, :), view(sc_pos, 1, :), view(sc_vel, 1, :))
         end
 
         # This is separate from the above loop because @tturbo uses vector intrinsics, which are not available for more complex functions
@@ -298,9 +301,12 @@ function run_sim(params::Params, run_idx)
                 continue # If debris object is already marked as removed, skip it
             end
 
-            if in_conditions(params, view(d_cartesian, i, :), view(d_cartesian_vel, i, :), sc_pos, sc_vel)
-                @inbounds t_begin = bisect(params, view(d_kepler, i, :), sc_kepler, t, t - (params.scan_time + params.ablation_time), t, in_conditions)
-                @inbounds t_end = bisect(params, view(d_kepler, i, :), sc_kepler, t, t, t + (params.scan_time + params.ablation_time), in_conditions_nofov)
+            # @inbounds compute_cartesian(params, view(d_cartesian_vel, i, :), view(d_cartesian, i, :), view(d_kepler, i, :))
+
+            # if in_conditions(params, view(d_cartesian, i, :), view(d_cartesian_vel, i, :), sc_pos, sc_vel)
+            @inbounds if conditions[i]
+                @inbounds t_begin = bisect(params, view(d_kepler, i, :), view(sc_kepler, 1, :), t, t - (params.scan_time + params.ablation_time), t, in_conditions)
+                @inbounds t_end = bisect(params, view(d_kepler, i, :), view(sc_kepler, 1, :), t, t, t + (params.scan_time + params.ablation_time), in_conditions_nofov)
                 @inbounds d_vis_times_pass[i] = t_end - t_begin
 
                 # If fragment is visible long enough, use ablation laser
@@ -318,7 +324,7 @@ function run_sim(params::Params, run_idx)
                     @inbounds new_perigee_alt = (d_kepler[i, 1] * (1 - d_kepler[i, 2]) - params.R_e)
                     @inbounds new_apogee_alt = (d_kepler[i, 1] * (1 + d_kepler[i, 2]) - params.R_e)
 
-                    @inbounds d_removed[i, 1] = (new_perigee_alt < params.min_perigee) || (new_apogee_alt < params.min_perigee) # Mark object as removed if perigee is now below 200 km
+                    @inbounds d_removed[i, 1] = (new_perigee_alt < params.min_perigee) || (new_apogee_alt < params.min_perigee) || (d_kepler[i, 2] > 1) || (d_kepler[i, 2] < 0) # Mark object as removed if perigee is now below 200 km or if object was brought on hyperbolic trajectory
                     @inbounds d_counter += d_removed[i, 1]
                     @inbounds increased_a_counter += (d_semimajor_original[i] > (params.R_e + params.h_collision))
 
