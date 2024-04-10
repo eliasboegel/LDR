@@ -15,9 +15,9 @@ using DelimitedFiles
     t0::Float64 = 5 * 24 * 3600  # 5 days
     h_offset::Float64 = 30e3  # [m]
     target_fraction::Float64 = 1 / 2
-    max_dv::Float64 = 0.1 # Maximum dV used in gaussian perturbation equations
+    max_dv::Float64 = 0.01 # Maximum dV used in gaussian perturbation equations
     FoV::Float64 = 38.44 * pi / 180  # [rad]
-    range::Float64 = 300e3 # [m]
+    range::Float64 = 250e3 # [m]
     incidence_angle::Float64 = 20 * pi / 180 # [rad]
     ablation_time::Float64 = 50 # [s]
     scan_time::Float64 = 5 # [s]
