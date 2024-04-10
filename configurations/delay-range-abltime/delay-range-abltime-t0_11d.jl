@@ -1,8 +1,4 @@
-import Pkg
-Pkg.add("DataFrames")
-Pkg.add("Parameters")
-
-include("../LDR.jl")
+include("../../LDR.jl")
 using .LDR
 
 configurations::Vector{Params} = [
