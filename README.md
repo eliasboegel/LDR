@@ -3,7 +3,7 @@ This repository contains the mission-level analysis code, as well as the used de
 If you use any part of this repository or the accompanying paper, please cite us:
 ```
 @conference{bogel_ldr,
-  author       = {Elias Bögel and Hugo Buurmeijer and Lorenz Veithen and Frank Meijering and Gabriel Alves Teixeira and Juan Bas Fernández and Daniel Rehling and Per van Wolfswinkel and Niek Zandvliet and Jan Struzińksi},
+  author       = {Elias Bögel and Hugo Buurmeijer and Lorenz Veithen and Frank Meijering and Gabriel Alves Teixeira and Daniel Rehling and Juan Bas Fernández and Per van Wolfswinkel and Niek Zandvliet and Jan Struzińksi},
   title        = {{Feasibility Analysis of Small-Size Space Debris Removal in Low-Earth Orbit by Space-Based Laser Ablation}},
   booktitle    = {International Symposium on Space Flight Dynamics (ISSFD)},
   year         = {2024},
