@@ -1,4 +1,4 @@
-This repository contains the mission-level analysis code, as well as the used debris dataset and the output dataset used in "Feasibility Analysis of Small-Size Space Debris Removal in Low-Earth Orbit by Space-Based Laser Ablation" as presented at the 29th International Symposium on Space Flight Dynamics (ISSFD) 2024.
+This repository contains the mission-level analysis code, as well as the used debris dataset and the output dataset used in ["Feasibility Analysis of Small-Size Space Debris Removal in Low-Earth Orbit by Space-Based Laser Ablation"](https://www.researchgate.net/publication/380029470_Feasibility_Analysis_of_Small-Size_Space_Debris_Removal_in_Low-Earth_Orbit_by_Space-Based_Laser_Ablation) as presented at the 29th International Symposium on Space Flight Dynamics (ISSFD) 2024.
 
 If you use any part of this repository or the accompanying paper, please cite us:
 ```
